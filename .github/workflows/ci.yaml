@@ -18,6 +18,9 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-system-features = kvm
 
       - name: Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@main
