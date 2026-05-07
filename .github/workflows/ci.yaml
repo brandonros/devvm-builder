@@ -32,8 +32,13 @@ jobs:
           nix build .#devvm --print-build-logs
 
           mkdir -p artifacts
+
           # `result` is the qcow2 file itself (output of qemu-img convert).
           cp -L result artifacts/devvm.qcow2
+
+          # `cp` from /nix/store inherits mode 444; make it writable so consumers
+          # don't have to chmod after download (qemu needs write access to boot).
+          chmod 644 artifacts/devvm.qcow2
 
           ls -lh artifacts/
 
