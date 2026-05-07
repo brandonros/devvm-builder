@@ -1,0 +1,7 @@
+# private SSH keys — never commit. Public keys (*.pub) are tracked.
+keys/*
+!keys/*.pub
+
+# nix build outputs
+result
+result-*

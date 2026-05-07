@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build qcow2 image
+        run: |
+          nix build .#devvm --print-build-logs
+
+          mkdir -p artifacts
+          # disko writes one qcow2 per disk under result/; copy them all out.
+          cp -L result/*.qcow2 artifacts/ 2>/dev/null || cp -RL result/. artifacts/
+
+          ls -lh artifacts/
+
+      - name: Compress artifact
+        run: |
+          cd artifacts
+          for f in *.qcow2; do
+            [ -e "$f" ] || continue
+            zstd -T0 -10 "$f" -o "$f.zst"
+            rm "$f"
+          done
+          ls -lh
+
+      - name: Upload qcow2
+        uses: actions/upload-artifact@v4
+        with:
+          name: devvm-${{ matrix.arch }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0  # already zstd-compressed; skip upload-artifact's zip pass
