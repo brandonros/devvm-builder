@@ -7,15 +7,12 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixos-generators = {
-      url = "github:nix-community/nixos-generators";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
-  outputs = { self, nixpkgs, home-manager, nixos-generators }:
+  outputs = { self, nixpkgs, home-manager }:
     let
       system = "aarch64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
 
       modules = [
 
@@ -23,11 +20,23 @@
         ({ config, lib, pkgs, modulesPath, ... }: {
           imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
 
-          # Boot — systemd-boot is simpler than grub for pure-EFI VMs and plays
-          # cleanly with make-disk-image (which nixos-generators uses).
+          # Boot. systemd-boot manages bootloader updates after first boot;
+          # the *initial* bootloader files are written into the ESP at image-build
+          # time by the repart module below (see "10-esp" contents).
           boot.loader.systemd-boot.enable = true;
           boot.loader.efi.canTouchEfiVariables = false;
           boot.tmp.cleanOnBoot = true;
+
+          # Filesystems — discovered by GPT partition label (set in repart config).
+          fileSystems."/" = {
+            device = "/dev/disk/by-partlabel/root";
+            fsType = "ext4";
+          };
+          fileSystems."/boot" = {
+            device = "/dev/disk/by-partlabel/ESP";
+            fsType = "vfat";
+          };
+          boot.kernelParams = [ "root=PARTLABEL=root" ];
 
           # Locale
           time.timeZone = "America/New_York";
@@ -47,6 +56,64 @@
           nix.optimise = {
             automatic = true;
             dates = [ "weekly" ];
+          };
+        })
+
+        ## --- image build via systemd-repart (no VM, no KVM) ---
+        ## Builds the partitioned raw disk image entirely in the nix sandbox.
+        ## We hand-place the systemd-boot binary and a single bootloader entry
+        ## into the ESP so the image is bootable on first power-on; after that,
+        ## NixOS's systemd-boot module manages /boot normally.
+        ({ config, lib, pkgs, modulesPath, ... }: {
+          imports = [ (modulesPath + "/image/repart.nix") ];
+
+          image.repart = {
+            name = "devvm";
+            partitions = {
+              "10-esp" = {
+                contents = {
+                  # Removable-media path (firmware fallback) and standard systemd path.
+                  "/EFI/BOOT/BOOTAA64.EFI".source =
+                    "${pkgs.systemd}/lib/systemd/boot/efi/systemd-bootaa64.efi";
+                  "/EFI/systemd/systemd-bootaa64.efi".source =
+                    "${pkgs.systemd}/lib/systemd/boot/efi/systemd-bootaa64.efi";
+
+                  "/loader/loader.conf".source = pkgs.writeText "loader.conf" ''
+                    default nixos-generation-1.conf
+                    timeout 1
+                  '';
+
+                  "/loader/entries/nixos-generation-1.conf".source =
+                    pkgs.writeText "nixos-generation-1.conf" ''
+                      title NixOS
+                      linux /EFI/nixos/kernel
+                      initrd /EFI/nixos/initrd
+                      options init=${config.system.build.toplevel}/init ${lib.concatStringsSep " " config.boot.kernelParams}
+                    '';
+
+                  "/EFI/nixos/kernel".source =
+                    "${config.system.build.kernel}/${config.system.boot.loader.kernelFile}";
+                  "/EFI/nixos/initrd".source =
+                    "${config.system.build.initialRamdisk}/${config.system.boot.loader.initrdFile}";
+                };
+                repartConfig = {
+                  Type = "esp";
+                  Format = "vfat";
+                  Label = "ESP";
+                  SizeMinBytes = "256M";
+                  SizeMaxBytes = "256M";
+                };
+              };
+              "20-root" = {
+                storePaths = [ config.system.build.toplevel ];
+                repartConfig = {
+                  Type = "root";
+                  Format = "ext4";
+                  Label = "root";
+                  SizeMinBytes = "8G";
+                };
+              };
+            };
           };
         })
 
@@ -156,12 +223,10 @@
 
             programs.home-manager.enable = true;
 
-            ## home: bash
             programs.bash = {
               enable = true;
             };
 
-            ## home: git (identity + push behavior + gh credential helper)
             programs.git = {
               enable = true;
               settings = {
@@ -181,7 +246,6 @@
               };
             };
 
-            ## home: direnv (auto-activate per-project flakes on `cd`)
             programs.direnv = {
               enable = true;
               nix-direnv.enable = true;
@@ -207,14 +271,17 @@
         inherit system modules;
       };
 
-      ## --- flake outputs: `nix build .#devvm` produces qcow2 under ./result/ ---
-      ## nixos-generators builds the qcow2 in the sandbox via make-disk-image.nix
-      ## — no nested VM, no KVM needed (works on aarch64 GitHub runners).
+      ## --- flake outputs ---
+      ## repart produces a raw image; we wrap it in qemu-img convert to get qcow2.
+      ## Both steps run in the nix sandbox — no VM, no KVM.
       packages.${system} = {
-        devvm = nixos-generators.nixosGenerate {
-          inherit system modules;
-          format = "qcow-efi";
-        };
+        devvm = pkgs.runCommand "devvm.qcow2" {
+          nativeBuildInputs = [ pkgs.qemu-utils ];
+        } ''
+          qemu-img convert -f raw -O qcow2 \
+            ${self.nixosConfigurations.devvm.config.system.build.image}/devvm.raw \
+            $out
+        '';
         default = self.packages.${system}.devvm;
       };
     };

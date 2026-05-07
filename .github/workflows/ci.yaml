@@ -27,8 +27,8 @@ jobs:
           nix build .#devvm --print-build-logs
 
           mkdir -p artifacts
-          # disko writes one qcow2 per disk under result/; copy them all out.
-          cp -L result/*.qcow2 artifacts/ 2>/dev/null || cp -RL result/. artifacts/
+          # `result` is the qcow2 file itself (output of qemu-img convert).
+          cp -L result artifacts/devvm.qcow2
 
           ls -lh artifacts/
 
