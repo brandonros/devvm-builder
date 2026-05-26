@@ -42,6 +42,11 @@ jobs:
 
           ls -lh artifacts/
 
+      - name: Grow qcow2 virtual disk
+        run: |
+          qemu-img resize artifacts/devvm.qcow2 +100G
+          qemu-img info artifacts/devvm.qcow2
+
       - name: Compress artifact
         run: |
           cd artifacts
