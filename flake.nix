@@ -160,7 +160,6 @@
               # core
               bash
               tmux
-              git
 
               # language runtimes
               python3       # ad-hoc scripts, build-script deps
