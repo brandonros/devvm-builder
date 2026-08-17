@@ -2,9 +2,9 @@
   description = "devvm — NixOS aarch64 qcow2 image for QEMU";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
+      url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -45,7 +45,7 @@
           # Nix
           nix.settings.experimental-features = [ "nix-command" "flakes" ];
           nixpkgs.config.allowUnfree = true;
-          system.stateVersion = "25.11";
+          system.stateVersion = "26.05";
 
           nix.gc = {
             automatic = true;
@@ -60,10 +60,6 @@
         })
 
         ## --- image build via systemd-repart (no VM, no KVM) ---
-        ## Builds the partitioned raw disk image entirely in the nix sandbox.
-        ## We hand-place the systemd-boot binary and a single bootloader entry
-        ## into the ESP so the image is bootable on first power-on; after that,
-        ## NixOS's systemd-boot module manages /boot normally.
         ({ config, lib, pkgs, modulesPath, ... }: {
           imports = [ (modulesPath + "/image/repart.nix") ];
 
@@ -125,7 +121,7 @@
             hashedPassword = "$6$ZIVIn9wTIImsqY8a$8ApSAAI8GOJXKx330giWu.y7.qYip/txYZHdvOD5zp1BSINVW001aam.g8bWcrG9MQhPYnAlzzJHshffzSmLq1"; # foobar123
             openssh.authorizedKeys.keys =
               let
-                raw = builtins.readFile ./keys/brandon.pub;
+                raw = builtins.readFile ./keys/user.pub;
                 lines = map (l: lib.strings.trim l) (lib.splitString "\n" raw);
               in
                 lib.filter (l: l != "" && !(lib.hasPrefix "#" l)) lines;
@@ -271,8 +267,6 @@
       };
 
       ## --- flake outputs ---
-      ## repart produces a raw image; we wrap it in qemu-img convert to get qcow2.
-      ## Both steps run in the nix sandbox — no VM, no KVM.
       packages.${system} = {
         devvm = pkgs.runCommand "devvm.qcow2" {
           nativeBuildInputs = [ pkgs.qemu-utils ];

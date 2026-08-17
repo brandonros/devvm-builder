@@ -4,7 +4,7 @@ NixOS aarch64 qcow2 image for QEMU, built reproducibly from a flake (locally or 
 
 ## Setup
 
-Drop your SSH public key into [keys/brandon.pub](keys/brandon.pub) (one per line, `#` comments allowed).
+Drop your SSH public key into [keys/user.pub](keys/user.pub) (one per line, `#` comments allowed).
 
 ## Build
 
