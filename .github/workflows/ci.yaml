@@ -12,6 +12,9 @@ jobs:
           - runs-on: ubuntu-24.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runs-on }}
+    permissions:
+      id-token: "write"
+      contents: "read"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -26,6 +29,9 @@ jobs:
 
       - name: Magic Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Check Nix Flake
+        uses: DeterminateSystems/flake-checker-action@main
 
       - name: Build qcow2 image
         run: |
