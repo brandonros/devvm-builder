@@ -271,9 +271,14 @@
         devvm = pkgs.runCommand "devvm.qcow2" {
           nativeBuildInputs = [ pkgs.qemu-utils ];
         } ''
+          # Convert from raw to qcow2
           qemu-img convert -f raw -O qcow2 \
             ${self.nixosConfigurations.devvm.config.system.build.image}/devvm.raw \
             $out
+
+          # Grow the *virtual* disk past the 8G root partition repart baked in.
+          # qcow2 is sparse, so this costs a few KB of metadata, not 100G.
+          qemu-img resize $out +100G
         '';
         default = self.packages.${system}.devvm;
       };
